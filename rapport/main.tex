@@ -1,0 +1,422 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[french]{babel}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{url}
+
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=red!80!black,citecolor=black}
+\captionsetup{font=small}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+\renewcommand{\arraystretch}{1.25}
+
+% --- Raccourcis ---
+\newcommand{\pc}{\,\%}
+\newcommand{\mkt}{Mkt-RF}
+\newcommand{\rouge}[1]{\textcolor{red}{#1}}
+
+% --- Figure avec cadre de remplacement si le fichier est absent ---
+\newcommand{\fig}[2]{%
+  \IfFileExists{#1}{\includegraphics[width=#2\textwidth]{#1}}%
+  {\fbox{\parbox[c][4cm][c]{#2\textwidth}{\centering\color{gray}Fichier manquant :\\ \texttt{\detokenize{#1}}}}}}
+
+\begin{document}
+
+%==================================================
+% PAGE DE GARDE
+%==================================================
+\begin{titlepage}
+\centering
+\vspace*{0.5cm}
+\fbox{\fig{logo_encg_settat.png}{0.45}}\\[1.5cm]
+
+Université Hassan 1\textsuperscript{er} de Settat\\
+{\large\bfseries École Nationale de Commerce et de Gestion de Settat}\\
+ENCG Settat\\[1.5cm]
+
+Cours BD \& DS : examen individuel (Partie B)\\[0.3cm]
+{\Large Rapport de projet de science des données appliqué à la finance}\\[0.3cm]
+{\LARGE\bfseries F5 : Facteurs de risque d'un portefeuille}\\[0.8cm]
+
+\hfill Enseignant(e) : \rouge{Pr. Larhlimi Abderrahim}\\[1.2cm]
+
+\begin{minipage}[c]{0.6\textwidth}
+\raggedright
+Réalisé par \rouge{Oujedid Meryem}\\
+Code Apogée \rouge{\textit{25007570}}\\
+Groupe et filière \rouge{\textit{G3}}, S7 \rouge{\textit{FIN}}\\
+Algorithme principal : n°\,1, Régression linéaire (annexe A)
+\end{minipage}%
+\hfill
+\begin{minipage}[c]{0.3\textwidth}
+\centering
+\fbox{\fig{WhatsApp Image 2026-11-22 at 17.46.59.jpeg}{0.9}}
+\end{minipage}\\[1cm]
+
+\textbf{Dépôt GitHub :}
+\rouge{\textbf{\url{https://github.com/oujedidmeryem4290encg-lgtm/25007570-Oujedid-G3}}}\\[1.2cm]
+
+Année universitaire 2026-2027\\
+Remis le 24 novembre 2026
+\end{titlepage}
+
+%==================================================
+% 1 INTRODUCTION
+%==================================================
+\section{Introduction}
+
+\textbf{Contexte.} Un portefeuille est exposé à plusieurs sources de risque systématique (marché, taille, valeur), difficiles à séparer à l'œil nu. Mesurer ces expositions et la part de rendement non expliquée (l'alpha) permet à un gérant ou à un analyste de comprendre le style du portefeuille, de juger si une surperformance vient d'une compétence ou du simple risque pris, et de mieux maîtriser ce risque.
+
+\textbf{Problématique.} Les rendements mensuels en excès d'un portefeuille équipondéré de cinq grandes valeurs technologiques américaines s'expliquent-ils mieux par le modèle à trois facteurs de Fama-French (marché, taille, valeur) que par le CAPM seul, et son alpha est-il significativement différent de zéro ?
+
+\textbf{Objectif mesurable.} Métrique principale : R² hors échantillon, avec le RMSE et la MAE comme métriques secondaires. Référence naïve : la moyenne d'apprentissage, puis le CAPM. Jeu de test : 33 mois, d'avril 2023 à décembre 2025. Seuil fixé avant de voir les résultats : le R² hors échantillon du modèle à trois facteurs doit dépasser celui du CAPM et être supérieur à 0, et le test F de SMB et HML doit avoir une \textit{p-value} inférieure à 0,05.
+
+\textbf{Nature du problème.} Régression linéaire multiple, supervisée, à visée explicative : la cible (rendement en excès du portefeuille) est une valeur réelle, et l'on cherche à estimer et tester des coefficients (bêtas, alpha) plus qu'à prédire.
+
+\textbf{Organisation du rapport.} La section~2 présente l'état de l'art et la section~3 les travaux liés. Les sections 4 à 8 décrivent les données, leur exploration, leur préparation, l'algorithme retenu et le protocole expérimental. La section~9 présente les résultats, discutés en section~10, avant la conclusion (section~11).
+
+%==================================================
+% 2 ÉTAT DE L'ART
+%==================================================
+\section{État de l'art}
+
+En finance, les rendements d'un portefeuille s'expliquent classiquement par des facteurs de risque. Le CAPM \cite{sharpe} retient un seul facteur, le marché. Fama et French \cite{ff93} y ajoutent la taille et la valeur, puis la rentabilité et l'investissement \cite{ff15}. Plus récemment, des méthodes d'apprentissage automatique (régressions pénalisées, arbres, réseaux de neurones) ont été appliquées à la prévision des rendements \cite{gku}.
+
+\begin{table}[H]
+\centering
+\caption{Panorama des approches pour ce type de problème}
+\small
+\begin{tabularx}{\textwidth}{|p{2.6cm}|X|X|X|c|}
+\hline
+\textbf{Approche} & \textbf{Principe} & \textbf{Atouts} & \textbf{Limites} & \textbf{Réf.}\\\hline
+Moyenne historique (référence naïve) & Prédire toujours le rendement moyen & Aucune hypothèse, très simple & N'explique rien du risque du portefeuille & ---\\\hline
+CAPM & Rendement en excès = alpha + bêta $\times$ prime de risque du marché & Un seul paramètre de risque, interprétable & Ignore la taille et la valeur & \cite{sharpe}\\\hline
+Fama-French à 3 facteurs & Ajoute les facteurs taille (SMB) et valeur (HML) au CAPM & Meilleure explication, bêtas lisibles et testables & Facteurs fixés a priori ; bêtas supposés constants & \cite{ff93}\\\hline
+Apprentissage automatique & Régressions pénalisées, arbres, réseaux pour capter des relations non linéaires & Capte des interactions et non-linéarités & Beaucoup de données nécessaires ; peu interprétable & \cite{gku}\\\hline
+\end{tabularx}
+\end{table}
+
+%==================================================
+% 3 TRAVAUX LIÉS
+%==================================================
+\section{Travaux liés}
+
+\begin{table}[H]
+\centering
+\caption{Travaux liés}
+\small
+\begin{tabularx}{\textwidth}{|p{1.9cm}|p{2.5cm}|p{2.5cm}|X|p{2.8cm}|}
+\hline
+\textbf{Travail} & \textbf{Données} & \textbf{Méthode} & \textbf{Résultat principal} & \textbf{Différence avec ce travail}\\\hline
+Fama et French, 1993 \cite{ff93} & Actions américaines (NYSE, AMEX, Nasdaq), 1963-1991 & Régressions de portefeuilles sur marché, taille et valeur & Les trois facteurs expliquent l'essentiel des variations des rendements de portefeuilles diversifiés & Ici : cinq titres concentrés, 2015-2025, évaluation hors échantillon\\\hline
+Fama et French, 2015 \cite{ff15} & Actions américaines, 1963-2013 & Modèle à cinq facteurs (ajout de la rentabilité et de l'investissement) & Décrit mieux les rendements moyens que le modèle à trois facteurs ; HML devient redondant dans l'échantillon & Ici : trois facteurs seulement ; le modèle à cinq facteurs est une piste\\\hline
+Gu, Kelly et Xiu, 2020 \cite{gku} & Actions américaines, 1957-2016, nombreuses caractéristiques & Régressions pénalisées, arbres, réseaux de neurones & Les méthodes non linéaires améliorent la prévision des rendements par rapport aux modèles linéaires & Ici : modèle linéaire à visée explicative, trois variables\\\hline
+\end{tabularx}
+\end{table}
+
+\textbf{Positionnement.} Ce travail reprend le modèle à trois facteurs de \cite{ff93} et l'applique à un portefeuille concret de cinq titres. Il apporte une évaluation hors échantillon face à deux références (la moyenne et le CAPM) et une lecture chiffrée de ce que la taille et la valeur ajoutent à un portefeuille concentré de grandes valeurs technologiques.
+
+%==================================================
+% 4 JEU DE DONNÉES
+%==================================================
+\section{Jeu de données}
+
+\begin{itemize}[leftmargin=1.2cm]
+\item \textbf{Nom et source :} « Fama/French 3 Factors » (fichier \texttt{F-F\_Research\_Data\_Factors}), Kenneth R. French Data Library, Tuck School of Business, Dartmouth \cite{french}, \url{https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html} ; cours mensuels ajustés des cinq titres (AAPL, MSFT, GOOGL, AMZN, META) sur Yahoo Finance via la bibliothèque \texttt{yfinance}, \url{https://finance.yahoo.com}. Date d'extraction : 17/11/2026.
+\item \textbf{Licence ou conditions d'utilisation :} Fama-French : mention « Copyright 2026 Eugene F. Fama and Kenneth R. French », aucune licence explicite ; accès libre pour la recherche et l'enseignement, avec citation de la source. Yahoo Finance : usage personnel et non commercial, sans redistribution des données.
+\item \textbf{Taille :} 132 observations et 7 variables (Date, Portefeuille, RF, Rp\_exc, Mkt-RF, SMB, HML), de janvier 2015 à décembre 2025, fréquence mensuelle. Le fichier Fama-French complet compte 1\,203 mois (depuis juillet 1926).
+\item \textbf{Unité d'observation :} un mois calendaire (clé Date, format AAAAMM).
+\item \textbf{Variable cible :} Rp\_exc = Portefeuille $-$ RF, où Portefeuille est la moyenne des rendements mensuels des cinq titres (poids égaux, rééquilibrés chaque mois) et RF le taux sans risque du mois.
+\item \textbf{Adéquation :} les trois facteurs sont les variables explicatives du modèle de Fama-French ; ils sont publics et référencés, donc reproductibles. Environ 130 observations suffisent pour estimer quatre paramètres (alpha et trois bêtas), les tester et faire un découpage chronologique.
+\item \textbf{Limites :} biais de survie (titres choisis après coup parmi les gagnantes actuelles) ; portefeuille concentré sur un secteur ; seulement 132 mois, dont 33 pour le test ; facteurs et prix « courants », donc éventuellement révisés depuis leur première publication (le taux sans risque change de source en juin 2024) ; données Yahoo non officielles ; période incluant la crise du Covid-19 et la hausse des taux de 2022 (changements de régime) ; aucune valeur manquante sur la cible et les facteurs.
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\caption{Dictionnaire des principales variables}
+\small
+\begin{tabularx}{\textwidth}{|p{2.2cm}|X|p{1.6cm}|p{1.6cm}|p{2cm}|p{1.5cm}|}
+\hline
+\textbf{Variable} & \textbf{Description} & \textbf{Type} & \textbf{Unité} & \textbf{Rôle} & \textbf{Manquants (\%)}\\\hline
+Date & Mois d'observation (AAAAMM) & date (texte) & mois & clé de fusion & 0\\\hline
+Mkt-RF & Rendement du marché américain moins le taux sans risque & numérique & \% par mois & explicative & 0\\\hline
+SMB & \textit{Small Minus Big} : petites moins grandes capitalisations & numérique & \% par mois & explicative & 0\\\hline
+HML & \textit{High Minus Low} : titres « valeur » moins titres « croissance » & numérique & \% par mois & explicative & 0\\\hline
+Portefeuille (créée) & Moyenne des rendements des 5 titres : $\frac{1}{5}\sum 100\times\left(\frac{P_t}{P_{t-1}}-1\right)$ & numérique & \% par mois & intermédiaire & 0\\\hline
+Rp\_exc (créée) & Portefeuille $-$ RF & numérique & \% par mois & cible & 0\\\hline
+\end{tabularx}
+\end{table}
+
+Note : RF (taux sans risque, bon du Trésor à 1 mois, \% par mois, variable auxiliaire, 0\,\% de manquants) complète le dictionnaire.
+
+%==================================================
+% 5 EXPLORATION
+%==================================================
+\section{Exploration}
+
+\textbf{Statistiques descriptives.} Sur les 132 mois, la cible Rp\_exc a une moyenne de 2,03\pc{} par mois pour un écart-type de 6,15\pc{} (minimum $-14{,}25$\pc, maximum 18,94\pc), une asymétrie de $-0{,}14$ et un kurtosis (en excès) de $-0{,}04$. Le marché (\mkt) a une moyenne de 0,99\pc{} et un écart-type de 4,48\pc{} (asymétrie $-0{,}35$, kurtosis 0,78). SMB : moyenne $-0{,}18$\pc, écart-type 2,75\pc. HML : moyenne $-0{,}11$\pc, écart-type 3,72\pc, kurtosis 1,81.
+
+\textbf{Qualité des données.} Valeurs manquantes : détectées par \texttt{isna().sum()} ; aucune sur la cible et les trois facteurs (132 observations pour chacune). Doublons : contrôle des dates en double et des lignes identiques. Valeurs atypiques : règle $|z|>3$ et règle de l'écart interquartile ; décision : conservées, car en finance une valeur extrême (krach, rebond) est le plus souvent réelle et la supprimer biaiserait le risque estimé ; la robustesse des tests est contrôlée par des erreurs de Newey-West. \rouge{[À confirmer avec la sortie de la section 3.2 du notebook : nombre de doublons, mois atypiques détectés.]}
+
+\begin{figure}[H]
+\centering
+\fig{overleaf 3.png}{0.7}
+\caption{Volatilité mensuelle (écart-type) du portefeuille et des trois facteurs, 2015-2025}
+\end{figure}
+
+\textbf{Lecture de la figure 1.} Le portefeuille est environ 1,4 fois plus volatil que le marché (6,15\pc{} contre 4,48\pc) : on peut s'attendre à un bêta de marché supérieur à 1. Les facteurs taille et valeur sont moins volatils que le marché. Les queues sont plus épaisses que celles d'une loi normale pour HML et le marché, d'où l'usage d'erreurs robustes.
+
+\begin{figure}[H]
+\centering
+\fig{overleaf.png}{0.5}
+\caption{Corrélations entre les trois facteurs, 2015-2025}
+\end{figure}
+
+\textbf{Lecture de la figure 2.} Les facteurs sont peu corrélés entre eux (0,31 entre le marché et SMB, 0,09 entre SMB et HML, 0,00 entre le marché et HML). Les facteurs d'inflation de la variance (VIF) valent 1,10 (marché), 1,11 (SMB) et 1,01 (HML), très inférieurs au seuil d'alerte de 5 à 10 : il n'y a pas de multicolinéarité préoccupante, et les trois bêtas peuvent être estimés séparément.
+
+%==================================================
+% 6 PRÉPARATION
+%==================================================
+\section{Préparation}
+
+\begin{itemize}[leftmargin=1.2cm]
+\item \textbf{Nettoyage :} fusion interne des rendements du portefeuille et des facteurs sur le mois (une ligne par mois, sans trou ni doublon), suppression des lignes incomplètes, tri chronologique. Les valeurs extrêmes sont conservées (section~5).
+\item \textbf{Variables créées :} Portefeuille et Rp\_exc = Portefeuille $-$ RF (formules dans le tableau~3). Aucun retard ni moyenne glissante : le modèle explique le rendement d'un mois par les facteurs du même mois, et un décalage changerait la question posée.
+\item \textbf{Encodage et mise à l'échelle :} aucun encodage (toutes les variables explicatives sont numériques). Aucune mise à l'échelle pour les moindres carrés : leurs prédictions ne dépendent pas de l'échelle et garder les unités (\% par mois) permet de lire les bêtas directement. Elle est nécessaire pour Ridge (pénalité sensible à l'échelle) ; elle est alors ajustée sur l'apprentissage seulement, dans un \texttt{Pipeline} avec \texttt{StandardScaler}.
+\end{itemize}
+
+\textbf{Prévention des fuites.}
+\begin{itemize}[leftmargin=1.2cm,label=$\checkmark$]
+\item Transformations ajustées sur l'apprentissage seulement, dans un \texttt{Pipeline} (seul \texttt{StandardScaler} pour Ridge).
+\item Découpage chronologique 75\,\% / 25\,\%, sans mélange (données datées).
+\item Variables construites avec le passé seulement ; aucun horizon sur la cible (même mois), donc aucun écart nécessaire entre apprentissage et test.
+\item Aucune variable ne contient la cible : RF sert à la construire mais n'est pas explicative. Limite : \mkt{} est un indice du marché qui contient en partie les cinq titres.
+\item Jeu de test utilisé une seule fois, à la fin.
+\end{itemize}
+
+\textbf{Alignement des dates :} affichage des premières lignes (date, portefeuille, taux sans risque, cible, facteurs) pour vérifier que les facteurs et la cible portent sur le même mois ; contrôle par assertion que les dates sont croissantes, sans doublon, et que la dernière date d'apprentissage (2023-03) précède la première date de test (2023-04).
+
+%==================================================
+% 7 ALGORITHME
+%==================================================
+\section{Algorithme}
+
+\textbf{Choix.} Régression linéaire (moindres carrés ordinaires), n°\,1 de l'annexe~A. Elle convient à une cible continue, à 99 mois d'apprentissage et trois variables numériques peu corrélées, avec une relation linéaire attendue par construction du modèle de Fama-French et un fort besoin d'interprétation (bêtas, alpha, tests), ce que le CAPM et le modèle à trois facteurs de l'état de l'art \cite{sharpe,ff93} fournissent aussi. Ridge (n°\,2) et Lasso (n°\,3) ont été écartés comme algorithme principal : avec trois variables quasi indépendantes, la pénalisation est inutile et elle biaiserait les coefficients à interpréter ; Ridge sert de modèle de comparaison. La forêt aléatoire (n°\,6) ne fournit ni coefficients ni tests et demande plus de données.
+
+\textbf{Principe.} On cherche l'hyperplan qui rend les écarts entre rendements observés et prédits les plus petits possible, au sens de la somme des carrés. Étapes : (1) construire la matrice des variables avec une colonne de 1 ; (2) calculer les coefficients par la solution fermée ; (3) en déduire les prédictions et les résidus ; (4) calculer erreurs-types (classiques ou de Newey-West \cite{newey}), intervalles de confiance et tests. Implémentation : \texttt{LinearRegression} de scikit-learn \cite{sklearn} pour les prédictions, et \texttt{statsmodels} pour l'inférence.
+
+\textbf{Formule essentielle.}
+\begin{equation}
+y_t = \alpha + \beta_1\,\mathrm{Mkt\text{-}RF}_t + \beta_2\,\mathrm{SMB}_t + \beta_3\,\mathrm{HML}_t + \varepsilon_t
+\end{equation}
+où $y_t$ est le rendement en excès du portefeuille au mois $t$ (Rp\_exc, en \%) ; $\alpha$ est l'alpha, rendement non expliqué par les facteurs (\% par mois) ; $\beta_1,\beta_2,\beta_3$ sont les expositions (bêtas) aux facteurs \mkt, SMB et HML ; $\varepsilon_t$ est l'erreur du modèle, de moyenne nulle. Les coefficients sont estimés par $\hat{\theta}=(X^\top X)^{-1}X^\top y$, avec $\theta=(\alpha,\beta_1,\beta_2,\beta_3)^\top$, $X$ la matrice $n\times 4$ des variables (avec constante) et $y$ le vecteur des $n$ rendements.
+
+\textbf{Paramètres appris.} L'alpha et les trois bêtas, estimés à partir des 99 mois d'apprentissage. Les hyperparamètres sont fixés avant l'apprentissage (tableau~4).
+
+\begin{table}[H]
+\centering
+\caption{Hyperparamètres étudiés}
+\small
+\begin{tabularx}{\textwidth}{|p{3cm}|X|p{2.4cm}|p{1.8cm}|}
+\hline
+\textbf{Hyperparamètre} & \textbf{Rôle et effet attendu} & \textbf{Valeurs testées} & \textbf{Valeur retenue}\\\hline
+\texttt{fit\_intercept} (MCO) & Inclut l'alpha. À \texttt{False}, $\alpha$ serait forcé à 0 : les bêtas absorberaient le rendement moyen et seraient biaisés & True, False (non testé en validation) & True\\\hline
+\texttt{maxlags} (erreurs HAC de Newey-West) & Ne change pas les coefficients mais les erreurs-types : élargit les intervalles si les résidus sont autocorrélés ; trop grand, il rend les erreurs-types imprécises & fixé a priori & 3\\\hline
+\texttt{alpha} (Ridge, comparaison) & Force de pénalisation : proche de 0, on retrouve les MCO ; très grand, les coefficients tendent vers 0 et le modèle vers la moyenne (sous-apprentissage) & 0,1 ; 1 ; 10 ; 100 ; 1\,000 & 1\\\hline
+\end{tabularx}
+\end{table}
+
+%==================================================
+% 8 PROTOCOLE
+%==================================================
+\section{Protocole expérimental}
+
+\begin{table}[H]
+\centering
+\caption{Découpage des données}
+\small
+\begin{tabularx}{\textwidth}{|l|X|l|}
+\hline
+\textbf{Ensemble} & \textbf{Période ou proportion} & \textbf{Observations}\\\hline
+Apprentissage & de janvier 2015 à mars 2023 (75\,\%) & 99 mois\\\hline
+Validation & validation croisée \texttt{TimeSeriesSplit}, 5 plis chronologiques, sur l'apprentissage & plis de validation de 16 mois\\\hline
+Test & d'avril 2023 à décembre 2025 (25\,\%) & 33 mois\\\hline
+\end{tabularx}
+\end{table}
+
+\begin{itemize}[leftmargin=1.2cm]
+\item \textbf{Référence naïve :} la moyenne de Rp\_exc sur l'apprentissage, utilisée comme prédiction constante. Elle correspond au modèle sans facteur ; c'est la règle la plus simple pour une régression et elle donne un R² hors échantillon de 0 par construction. Le CAPM s'y ajoute comme référence intermédiaire.
+\item \textbf{Validation :} \texttt{TimeSeriesSplit} à 5 plis sur l'apprentissage, pour régler le seul hyperparamètre (alpha de Ridge, 5 valeurs) avec \texttt{GridSearchCV}. Nombre de configurations essayées : 5. Les MCO n'ont aucun hyperparamètre à régler. Le jeu de test n'est utilisé qu'une fois.
+\item \textbf{Métrique principale :} R² hors échantillon $= 1-\dfrac{\sum (y-\hat{y})^2}{\sum (y-\bar{y}_{\mathrm{app}})^2}$, sans unité. Il mesure la part de l'erreur de la référence que le modèle élimine sur des mois jamais vus (positif : il bat la référence). Il convient car c'est exactement l'objectif de la section~1.
+\item \textbf{Métriques secondaires :} RMSE (erreur typique, \% par mois, pénalise les gros écarts) et MAE (erreur absolue moyenne, \% par mois, moins sensible aux mois extrêmes).
+\item \textbf{Incertitude :} moyenne et écart-type sur les 5 plis de validation, et intervalle de confiance à 95\,\% du R² de test par bootstrap (2\,000 rééchantillonnages des mois de test).
+\item \textbf{Graine aléatoire :} 42.
+\end{itemize}
+
+%==================================================
+% 9 RÉSULTATS
+%==================================================
+\section{Résultats}
+
+\textbf{Lecture des résultats.} Sur le jeu de test, la référence a un RMSE de 4,69\pc. Le CAPM le ramène à 3,08\pc{} (R² hors échantillon 0,57) et le modèle à trois facteurs à 2,42\pc{} (R² hors échantillon 0,73), soit une erreur divisée par près de deux par rapport à la référence ; la MAE suit le même classement (3,87\pc, 2,30\pc{} et 1,96\pc). L'intervalle bootstrap à 95\,\% du R² de test est de [0,25 ; 0,79] pour le CAPM et de [0,53 ; 0,85] pour le modèle à trois facteurs : aucun ne contient 0, mais ils se chevauchent largement. Ridge (RMSE 2,41\pc, R² 0,74) est quasi identique aux MCO. Les scores de validation vont dans le même sens (tableau~6). La figure~3 montre que le RMSE de Ridge reste plat jusqu'à alpha $=1$ puis monte vers le niveau de la référence, et que l'écart entre R² d'apprentissage et de test se réduit à mesure que l'on ajoute des mois.
+
+\begin{table}[H]
+\centering
+\caption{Comparaison de la référence naïve et du modèle}
+\small
+\begin{tabular}{|p{4.2cm}|c|c|c|c|}
+\hline
+ & \multicolumn{2}{c|}{\textbf{Métrique principale : R² hors échantillon}} & \multicolumn{2}{c|}{\textbf{Métrique secondaire : RMSE (\% par mois)}}\\\hline
+\textbf{Modèle} & \textbf{Validation} & \textbf{Test} & \textbf{Validation} & \textbf{Test}\\\hline
+Référence : moyenne d'apprentissage & $0{,}00\pm 0{,}00$ & 0,00 & $6{,}43\pm 2{,}27$ & 4,69\\\hline
+CAPM & $0{,}46\pm 0{,}54$ & 0,57 & $3{,}98\pm 1{,}15$ & 3,08\\\hline
+\textbf{Algorithme retenu : MCO à 3 facteurs} & $\mathbf{0{,}71\pm 0{,}12}$ & \textbf{0,73} & $\mathbf{3{,}23\pm 0{,}72}$ & \textbf{2,42}\\\hline
+Ridge (comparaison) & $0{,}72\pm 0{,}11$ & 0,74 & $3{,}22\pm 0{,}74$ & 2,41\\\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\fig{overleaf 2.png}{0.95}
+\caption{Courbe de validation de Ridge (RMSE selon alpha) et courbe d'apprentissage des MCO à trois facteurs (R² selon le nombre de mois)}
+\end{figure}
+
+\textbf{Analyse des erreurs.} Le biais moyen sur le test est de $-0{,}19$\pc{} par mois (légère surestimation) et l'autocorrélation d'ordre 1 des erreurs est de $-0{,}09$ : les erreurs ne présentent pas de structure temporelle exploitable. Les plus grosses erreurs, de 3,1 à 5,1\pc{} en valeur absolue, se situent en mai 2023, août 2024, décembre 2024, février 2025 et août 2025. Ce sont des mois où le portefeuille s'écarte de ce que le marché laissait prévoir : en mai 2023, marché quasi stable (0,34\pc) mais portefeuille à +9,78\pc{} (prédit : 4,70\pc) ; en décembre 2024, marché à $-3{,}17$\pc{} mais portefeuille à +4,59\pc{} (prédit : $-0{,}11$\pc) ; en février 2025, portefeuille à $-6{,}70$\pc{} (prédit : $-2{,}12$\pc). C'est du risque propre aux cinq titres, que des facteurs de marché, de taille et de valeur ne captent pas.
+
+\begin{table}[H]
+\centering
+\caption{Prédictions sur des observations non utilisées pour l'apprentissage}
+\small
+\begin{tabularx}{\textwidth}{|l|c|c|X|c|}
+\hline
+\textbf{Observation} & \textbf{Prédiction (\%)} & \textbf{Valeur réelle (\%)} & \textbf{Commentaire} & \textbf{Erreur (\%)}\\\hline
+2023-04 & 3,10 & 5,34 & Marché stable (0,62\pc), grandes valeurs favorisées (SMB $-3{,}37$\pc) : le portefeuille fait mieux que prévu & $+2{,}23$\\\hline
+2024-03 & 2,98 & 0,91 & Marché en hausse (2,84\pc), mais les titres « valeur » battent la croissance (HML +4,16\pc) : le portefeuille en profite moins & $-2{,}07$\\\hline
+2025-02 & $-2{,}12$ & $-6{,}70$ & Mois défavorable aux grandes valeurs de croissance : le modèle prévoit la baisse mais pas son ampleur & $-4{,}58$\\\hline
+2025-12 & $-0{,}49$ & $-1{,}43$ & Les facteurs expliquent bien le mois : erreur faible & $-0{,}94$\\\hline
+\end{tabularx}
+\end{table}
+
+%==================================================
+% 10 DISCUSSION
+%==================================================
+\section{Discussion des résultats}
+
+\textbf{Réponse à l'objectif.} L'objectif fixé dans l'introduction est atteint, car le R² hors échantillon du modèle à trois facteurs (0,73) dépasse celui du CAPM (0,57) et 0, et le test F de SMB et HML donne $F=42{,}29$ avec une \textit{p-value} inférieure à 0,0001. Réserve : sur 33 mois de test, les intervalles bootstrap des deux modèles se chevauchent ; c'est le test F, calculé sur les 132 mois, qui établit l'apport de la taille et de la valeur.
+
+\textbf{Interprétation.} Estimé sur les 132 mois avec des erreurs robustes (tableau~B1), le bêta de marché est de 1,15 (IC 95\,\% [1,05 ; 1,26]) : le portefeuille amplifie d'environ 15\,\% les mouvements du marché. Le bêta SMB ($-0{,}36$) et le bêta HML ($-0{,}56$) sont significativement négatifs : biais vers les grandes capitalisations et vers la croissance, cohérent avec cinq grandes valeurs technologiques. L'alpha est de 0,76\pc{} par mois (environ 9,5\pc{} par an), IC 95\,\% [0,29 ; 1,24], significatif. L'importance par permutation classe d'abord le marché (hausse du RMSE de 5,40 points), puis HML (1,23) et SMB (0,44) (tableau~B3). Ces coefficients décrivent une association, pas une relation causale.
+
+\textbf{Surapprentissage et généralisation.} Le R² d'apprentissage (0,78) est proche de celui de test (0,73) : écart de 0,05, donc surapprentissage limité, ce que confirme la courbe d'apprentissage (figure~3). Entre 2015-2019 et 2020-2025, le bêta de marché passe de 1,23 à 1,12, l'alpha de 0,84 à 0,68\pc{} par mois et le bêta HML reste stable ($-0{,}54$ puis $-0{,}56$), tandis que le bêta SMB passe de $-0{,}53$ à $-0{,}28$ (tableau~B2) : les coefficients sont globalement stables, avec une réserve sur SMB. Les MCO sont déterministes : la graine n'intervient que dans le bootstrap.
+
+\textbf{Comparaison avec les travaux liés.} Les résultats vont dans le sens de \cite{ff93} : le marché explique l'essentiel du risque, et la taille et la valeur apportent un complément significatif. Le biais vers la croissance (HML négatif) est cohérent avec la composition du portefeuille. Notre échantillon, très concentré, ne permet pas de tester la thèse de \cite{ff15} selon laquelle HML devient redondant avec les facteurs de rentabilité et d'investissement.
+
+\textbf{Limites et biais.} Biais de survie : les cinq titres sont des gagnantes actuelles choisies après coup, ce qui gonfle l'alpha ; il ne prouve donc pas une compétence. Portefeuille concentré sur un secteur, d'où un risque spécifique important. Seulement 33 mois de test. Modèle explicatif : les facteurs du mois sont connus après coup, il ne prévoit pas les rendements. \mkt{} contient en partie les cinq titres. Données courantes, éventuellement révisées. Période couvrant le Covid-19 et la hausse des taux de 2022.
+
+\textbf{Pistes d'amélioration.} (1) Élargir à 20 à 30 titres, y compris des entreprises disparues ou en déclin (base CRSP), pour réduire le biais de survie et le risque spécifique. (2) Ajouter le facteur momentum ou passer au modèle à cinq facteurs \cite{ff15} et comparer les R² ajustés.
+
+%==================================================
+% 11 CONCLUSION
+%==================================================
+\section{Conclusion}
+
+Oui : pour ce portefeuille, le modèle à trois facteurs explique mieux les rendements que le CAPM seul, avec un R² hors échantillon de 0,73 contre 0,57 et un test F de SMB et HML significatif ($p<0{,}0001$). L'objectif mesurable est atteint. Le portefeuille est exposé au marché (bêta 1,15), aux grandes capitalisations et à la croissance, et son alpha de 0,76\pc{} par mois est significatif, mais probablement gonflé par le biais de survie. Perspective : élargir le portefeuille à 20 à 30 titres, dont des entreprises disparues, et tester le facteur momentum.
+
+%==================================================
+% RÉFÉRENCES
+%==================================================
+\begin{thebibliography}{9}
+\bibitem[1]{french} K. R. French, « Data Library : Fama/French 3 Factors (F-F\_Research\_Data\_Factors) », Tuck School of Business, Dartmouth, \url{https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html}, consulté le 17/11/2026 ; Yahoo Finance, cours mensuels ajustés, \url{https://finance.yahoo.com}, consulté le 17/11/2026.
+\bibitem[2]{sharpe} W. F. Sharpe, « Capital asset prices: a theory of market equilibrium under conditions of risk », \textit{The Journal of Finance}, vol. 19, n°\,3, p. 425-442, 1964.
+\bibitem[3]{ff93} E. F. Fama et K. R. French, « Common risk factors in the returns on stocks and bonds », \textit{Journal of Financial Economics}, vol. 33, n°\,1, p. 3-56, 1993. \url{https://doi.org/10.1016/0304-405X(93)90023-5}
+\bibitem[4]{ff15} E. F. Fama et K. R. French, « A five-factor asset pricing model », \textit{Journal of Financial Economics}, vol. 116, n°\,1, p. 1-22, 2015.
+\bibitem[5]{sklearn} F. Pedregosa et al., « Scikit-learn : Machine Learning in Python », \textit{Journal of Machine Learning Research}, vol. 12, p. 2825-2830, 2011.
+\bibitem[6]{cours} Support du cours BD \& DS, notebook \texttt{Tp\_ML.ipynb}, ENCG-2026.
+\bibitem[7]{gku} S. Gu, B. Kelly et D. Xiu, « Empirical asset pricing via machine learning », \textit{The Review of Financial Studies}, vol. 33, n°\,5, p. 2223-2273, 2020.
+\bibitem[8]{newey} W. K. Newey et K. D. West, « A simple, positive semi-definite, heteroskedasticity and autocorrelation consistent covariance matrix », \textit{Econometrica}, vol. 55, n°\,3, p. 703-708, 1987.
+\bibitem[9]{statsmodels} S. Seabold et J. Perktold, « Statsmodels : econometric and statistical modeling with Python », \textit{Proceedings of the 9th Python in Science Conference}, 2010.
+\end{thebibliography}
+
+%==================================================
+% ANNEXES
+%==================================================
+\appendix
+\section*{A\quad Reproduction}
+Version corrigée : étiquette \texttt{remise-finale} du dépôt \url{https://github.com/oujedidmeryem4290encg-lgtm/25007570-Oujedid-G3}.
+\begin{enumerate}[leftmargin=1.2cm]
+\item Cloner le dépôt : \texttt{git clone} suivi du lien ci-dessus.
+\item Installer les dépendances : \texttt{pip install -r requirements.txt}.
+\item Exécuter \texttt{notebooks/F5\_25007570.ipynb} avec « Redémarrer et tout exécuter ».
+\end{enumerate}
+
+\section*{B\quad Tableaux et figures complémentaires}
+
+\begin{table}[H]
+\centering
+\caption*{Tableau B1 : Coefficients du modèle à 3 facteurs (132 mois, erreurs robustes de Newey-West, 3 retards)}
+\small
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+\textbf{Coefficient} & \textbf{Estimation} & \textbf{IC 95\,\% (bas)} & \textbf{IC 95\,\% (haut)} & \textbf{p-value (HAC)} & \textbf{p-value (MCO)}\\\hline
+Alpha (\% par mois) & 0,7615 & 0,2854 & 1,2376 & 0,0017 & 0,0049\\\hline
+$\beta$ \mkt & 1,1536 & 1,0504 & 1,2567 & $<0{,}0001$ & $<0{,}0001$\\\hline
+$\beta$ SMB & $-0{,}3606$ & $-0{,}5451$ & $-0{,}1762$ & 0,0001 & 0,0004\\\hline
+$\beta$ HML & $-0{,}5619$ & $-0{,}7367$ & $-0{,}3870$ & $<0{,}0001$ & $<0{,}0001$\\\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption*{Tableau B2 : Stabilité des coefficients sur deux sous-périodes}
+\small
+\begin{tabular}{|l|c|c|c|c|c|c|}
+\hline
+\textbf{Sous-période} & \textbf{N (mois)} & \textbf{Alpha (\% par mois)} & \textbf{$\beta$ \mkt} & \textbf{$\beta$ SMB} & \textbf{$\beta$ HML} & \textbf{R²}\\\hline
+2015-2019 & 60 & 0,842 & 1,229 & $-0{,}525$ & $-0{,}542$ & 0,714\\\hline
+2020-2025 & 72 & 0,679 & 1,120 & $-0{,}276$ & $-0{,}564$ & 0,810\\\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption*{Tableau B3 : Importance par permutation (jeu d'apprentissage, 200 répétitions)}
+\small
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Variable} & \textbf{Hausse du RMSE si la variable est mélangée (\%)} & \textbf{Écart-type}\\\hline
+\mkt & 5,396 & 0,395\\\hline
+HML & 1,232 & 0,194\\\hline
+SMB & 0,436 & 0,112\\\hline
+\end{tabular}
+\end{table}
+
+\section*{C\quad Déclaration des outils d'IA}
+
+\begin{table}[H]
+\centering
+\caption*{Tableau 8 : Ressources et outils d'IA utilisés}
+\small
+\begin{tabularx}{\textwidth}{|p{2.5cm}|X|p{1.8cm}|p{2.2cm}|}
+\hline
+\textbf{Outil ou ressource} & \textbf{Usage précis} & \textbf{Parties concernées} & \textbf{Vérification effectuée}\\\hline
+Claude (Anthropic), 17/11/2026 & Assistance à l'écriture du code relatif aux modèles MCO et Ridge, à l'optimisation des hyperparamètres avec \texttt{GridSearchCV} et \texttt{TimeSeriesSplit}, au bootstrap, à l'importance par permutation et à l'analyse par sous-périodes. Assistance également à la rédaction de la présentation de l'algorithme et du protocole méthodologique. & Sections 5 à 7 & exécuté, relu, compris, modifié\\\hline
+Claude (Anthropic) & Assistance à la rédaction de l'analyse critique, de la conclusion et de la liste des références bibliographiques. & Sections 8 à 10 & exécuté, relu, compris, modifié\\\hline
+Support du cours : notebook « TP : facteurs de risque d'un portefeuille » & Fourni par l'enseignant. Source de la démarche méthodologique et de certaines cellules de code, notamment le chargement des données Fama-French, la construction du portefeuille avec \texttt{yfinance}, les modèles MCO et les diagnostics, reprises ou adaptées dans le cadre du projet. & Sections 2 à 7 & exécuté, relu, compris, modifié\\\hline
+Support du cours : notebook « 29 exemples Python, principaux algorithmes » (annexe A) & Fourni par l'enseignant. Référence pour le choix des algorithmes n°\,1 (régression linéaire) et n°\,2 et 3 (Ridge et Lasso). & Sections 1 à 5 & exécuté, relu, compris, modifié\\\hline
+Données : Kenneth R. French Data Library et Yahoo Finance (\texttt{yfinance}) & Extraites le 17/11/2026. Sources des données financières utilisées dans le projet, notamment pour la constitution de la base de données et la réalisation des analyses empiriques. & Sections 2 à 7 & exécuté, relu, compris, modifié\\\hline
+\end{tabularx}
+\end{table}
+
+\end{document}
